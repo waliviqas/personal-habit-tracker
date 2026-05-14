@@ -8,6 +8,7 @@ struct PersonaHabitApp: App {
             Habit.self,
             HabitCompletion.self,
             JournalEntry.self,
+            Sprint.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

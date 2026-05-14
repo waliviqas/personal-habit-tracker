@@ -13,11 +13,12 @@ struct ContentView: View {
                     .transition(.opacity)
             }
         }
+        .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.3), value: showSplash)
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Habit.self, HabitCompletion.self, JournalEntry.self], inMemory: true)
+        .modelContainer(for: [Habit.self, HabitCompletion.self, JournalEntry.self, Sprint.self], inMemory: true)
 }

@@ -3,14 +3,33 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Habit.order) private var habits: [Habit]
+    @Query(sort: \Habit.order) private var allHabits: [Habit]
+    @Query(sort: \Sprint.startDate, order: .reverse) private var sprints: [Sprint]
+
+    private var activeSprint: Sprint? {
+        let today = Calendar.current.startOfDay(for: Date())
+        return sprints.first {
+            let s = Calendar.current.startOfDay(for: $0.startDate)
+            let e = Calendar.current.startOfDay(for: $0.endDate)
+            return s <= today && today <= e
+        }
+    }
+
+    private var sprintProgress: SprintProgress? {
+        guard let active = activeSprint else { return nil }
+        return SprintEngine.compute(active, habits: allHabits)
+    }
+
+    private var todayHabits: [Habit] {
+        allHabits.filter { $0.isScheduled(on: Date()) }
+    }
 
     private var orderedHabits: [Habit] {
-        habits.filter { $0.isOrdered }.sorted { $0.order < $1.order }
+        todayHabits.filter { $0.isOrdered }.sorted { $0.order < $1.order }
     }
 
     private var unorderedHabits: [Habit] {
-        habits.filter { !$0.isOrdered }
+        todayHabits.filter { !$0.isOrdered }
     }
 
     private var nextOrdered: Habit? {
@@ -18,48 +37,56 @@ struct TodayView: View {
     }
 
     private var allDone: Bool {
-        !habits.isEmpty && habits.allSatisfy { $0.isCompleted(on: Date()) }
+        !todayHabits.isEmpty && todayHabits.allSatisfy { $0.isCompleted(on: Date()) }
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if habits.isEmpty {
-                        emptyState
-                    } else if allDone {
-                        celebrationState
-                    } else {
-                        if let next = nextOrdered {
-                            nextUpCard(habit: next)
+            ZStack {
+                Theme.navy.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if let sprint = activeSprint, let progress = sprintProgress {
+                            SprintCardView(sprint: sprint, progress: progress)
                         }
 
-                        if !orderedHabits.isEmpty {
-                            sectionHeader("Ordered")
-                            VStack(spacing: 0) {
-                                ForEach(orderedHabits) { habit in
-                                    habitRow(habit: habit)
-                                }
+                        if todayHabits.isEmpty {
+                            emptyState
+                        } else if allDone {
+                            celebrationState
+                        } else {
+                            if let next = nextOrdered {
+                                nextUpCard(habit: next)
                             }
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
 
-                        if !unorderedHabits.isEmpty {
-                            sectionHeader("Whenever today")
-                            VStack(spacing: 0) {
-                                ForEach(unorderedHabits) { habit in
-                                    habitRow(habit: habit)
+                            if !orderedHabits.isEmpty {
+                                sectionHeader("Ordered")
+                                VStack(spacing: 0) {
+                                    ForEach(orderedHabits) { habit in
+                                        habitRow(habit: habit)
+                                    }
                                 }
+                                .background(Theme.cardNavy)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                            if !unorderedHabits.isEmpty {
+                                sectionHeader("Whenever today")
+                                VStack(spacing: 0) {
+                                    ForEach(unorderedHabits) { habit in
+                                        habitRow(habit: habit)
+                                    }
+                                }
+                                .background(Theme.cardNavy)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
                         }
                     }
+                    .padding()
                 }
-                .padding()
             }
-            .navigationTitle("Today")
+            .navigationTitle("Home")
         }
     }
 
@@ -67,11 +94,12 @@ struct TodayView: View {
         VStack(spacing: 16) {
             Image(systemName: "leaf")
                 .font(.system(size: 50))
-                .foregroundColor(.secondary)
-            Text("No habits yet")
+                .foregroundColor(Theme.secondaryText)
+            Text("Nothing scheduled today")
                 .font(.title2)
-            Text("Add your non-negotiables in the Habits tab.")
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.primaryText)
+            Text("Add habits in the Habits tab and assign them to today.")
+                .foregroundColor(Theme.secondaryText)
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 60)
@@ -85,8 +113,9 @@ struct TodayView: View {
             Text("All done for today")
                 .font(.title2)
                 .bold()
+                .foregroundColor(Theme.primaryText)
             Text("See you tomorrow.")
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.secondaryText)
         }
         .padding(.top, 60)
     }
@@ -95,7 +124,7 @@ struct TodayView: View {
         VStack(spacing: 16) {
             Text("Next up")
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(Theme.secondaryText)
                 .textCase(.uppercase)
             Text(habit.name)
                 .font(.system(size: 32, weight: .bold, design: .rounded))
@@ -106,7 +135,7 @@ struct TodayView: View {
             } label: {
                 Text("Done")
                     .font(.headline)
-                    .foregroundColor(Color(red: 0.07, green: 0.13, blue: 0.32))
+                    .foregroundColor(Theme.navy)
                     .padding(.horizontal, 40)
                     .padding(.vertical, 14)
                     .background(Color.white)
@@ -115,14 +144,14 @@ struct TodayView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(28)
-        .background(Color(red: 0.07, green: 0.13, blue: 0.32))
+        .background(Theme.cardNavy)
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private func sectionHeader(_ text: String) -> some View {
         Text(text)
             .font(.caption)
-            .foregroundColor(.secondary)
+            .foregroundColor(Theme.secondaryText)
             .textCase(.uppercase)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 8)
@@ -136,18 +165,20 @@ struct TodayView: View {
             } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundColor(done ? .green : .secondary)
+                    .foregroundColor(done ? .green : Theme.secondaryText)
             }
             .buttonStyle(.plain)
             Text(habit.name)
                 .strikethrough(done)
-                .foregroundColor(done ? .secondary : .primary)
+                .foregroundColor(done ? Theme.secondaryText : Theme.primaryText)
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
-            Divider().padding(.leading, 48)
+            Divider()
+                .background(Color.white.opacity(0.1))
+                .padding(.leading, 48)
         }
     }
 
@@ -155,6 +186,7 @@ struct TodayView: View {
         if !habit.isCompleted(on: Date()) {
             let completion = HabitCompletion(date: Date(), habit: habit)
             modelContext.insert(completion)
+            try? modelContext.save()
         }
     }
 
@@ -166,5 +198,6 @@ struct TodayView: View {
             let completion = HabitCompletion(date: Date(), habit: habit)
             modelContext.insert(completion)
         }
+        try? modelContext.save()
     }
 }
